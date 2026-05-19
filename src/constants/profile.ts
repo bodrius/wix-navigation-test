@@ -1,0 +1,1 @@
+export const PROFILE_BACKDROP_MAX_OPACITY = 0.9;

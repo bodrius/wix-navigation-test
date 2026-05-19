@@ -5,7 +5,9 @@ import {
   ListRenderItem,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Pressable,
   StyleSheet,
+  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -14,6 +16,7 @@ import { Navigation } from 'react-native-navigation';
 import type { NavigationFunctionComponent } from 'react-native-navigation';
 import Animated, {
   Easing,
+  Extrapolation,
   interpolate,
   runOnJS,
   useAnimatedStyle,
@@ -23,6 +26,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { getFullImageUri, type ImageItem } from '../data/images';
+import { PROFILE_BACKDROP_MAX_OPACITY } from '../constants/profile';
+import { ProfileContent } from './ProfileScreen';
 import { secondScreenOptions } from '../navigation/secondScreenOptions';
 import { viewerState } from '../state/viewerState';
 import type { ImageLayoutBounds } from '../types/imageLayout';
@@ -43,6 +48,11 @@ const DISMISS_DRAG_THRESHOLD = 120;
 const DISMISS_VELOCITY_THRESHOLD = 900;
 const OPEN_DURATION_MS = 320;
 const HANDOFF_DURATION_MS = 160;
+const PROFILE_SHEET_HEIGHT_RATIO = 0.88;
+const PROFILE_SNAP_THRESHOLD = 0.35;
+const PROFILE_OPEN_VELOCITY_THRESHOLD = -700;
+const PROFILE_SPRING = { damping: 22, stiffness: 280 };
+const FOOTER_HEIGHT = 100;
 
 const getDragFactor = (x: number, y: number, screenHeight: number) => {
   'worklet';
@@ -83,6 +93,12 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
   const dragY = useSharedValue(0);
   const isClosing = useSharedValue(0);
   const activeSourceBounds = useSharedValue(sourceBounds);
+  const profileProgress = useSharedValue(0);
+  const profileBackdropOpacity = useSharedValue(0);
+  const profileGestureStart = useSharedValue(0);
+
+  const profileDragDistance = screenHeight * 0.38;
+  const profileSheetHeight = screenHeight * PROFILE_SHEET_HEIGHT_RATIO;
 
   const targetBounds = useMemo(
     () =>
@@ -194,6 +210,8 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
     dragX.value = withSpring(0, snapSpring);
     dragY.value = withSpring(0, snapSpring);
     openProgress.value = withSpring(0, snapSpring);
+    profileProgress.value = 0;
+    profileBackdropOpacity.value = 0;
   }, [
     activeSourceBounds,
     backdropOpacity,
@@ -204,12 +222,40 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
     isClosing,
     morphProgress,
     openProgress,
+    profileBackdropOpacity,
+    profileProgress,
     resolveSourceBounds,
   ]);
 
   const panGesture = Gesture.Pan()
-    .activeOffsetY(8)
+    .activeOffsetY([-12, 12])
+    .failOffsetX([-28, 28])
+    .onStart(() => {
+      profileGestureStart.value = profileProgress.value;
+    })
     .onUpdate(event => {
+      const isProfileGesture =
+        profileGestureStart.value > 0 || event.translationY < 0;
+
+      if (isProfileGesture) {
+        let nextProgress = profileGestureStart.value;
+
+        if (event.translationY < 0) {
+          nextProgress =
+            profileGestureStart.value +
+            Math.min(Math.abs(event.translationY) / profileDragDistance, 1);
+        } else {
+          nextProgress =
+            profileGestureStart.value -
+            Math.min(event.translationY / profileDragDistance, 1);
+        }
+
+        profileProgress.value = Math.max(0, Math.min(1, nextProgress));
+        profileBackdropOpacity.value =
+          profileProgress.value * PROFILE_BACKDROP_MAX_OPACITY;
+        return;
+      }
+
       dragY.value = Math.max(0, event.translationY);
       dragX.value = event.translationX;
 
@@ -221,6 +267,29 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
       }
     })
     .onEnd(event => {
+      const isProfileGesture =
+        profileGestureStart.value > 0 ||
+        event.translationY < -5 ||
+        profileProgress.value > 0.01;
+
+      if (isProfileGesture) {
+        const shouldOpen =
+          profileProgress.value > PROFILE_SNAP_THRESHOLD ||
+          event.velocityY < PROFILE_OPEN_VELOCITY_THRESHOLD;
+
+        if (shouldOpen) {
+          profileProgress.value = withSpring(1, PROFILE_SPRING);
+          profileBackdropOpacity.value = withSpring(
+            PROFILE_BACKDROP_MAX_OPACITY,
+            PROFILE_SPRING,
+          );
+        } else {
+          profileProgress.value = withSpring(0, PROFILE_SPRING);
+          profileBackdropOpacity.value = withSpring(0, PROFILE_SPRING);
+        }
+        return;
+      }
+
       const shouldDismiss =
         event.translationY > DISMISS_DRAG_THRESHOLD ||
         event.velocityY > DISMISS_VELOCITY_THRESHOLD;
@@ -273,6 +342,37 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
     }
 
     return { opacity: 1 - handoffProgress.value };
+  });
+
+  const profileOverlayStyle = useAnimatedStyle(() => {
+    const opacity =
+      profileBackdropOpacity.value > 0
+        ? profileBackdropOpacity.value
+        : profileProgress.value * PROFILE_BACKDROP_MAX_OPACITY;
+
+    return { opacity };
+  });
+
+  const footerStyle = useAnimatedStyle(() => {
+    const isHidden =
+      isDismissDragging(dragX.value, dragY.value) || isClosing.value === 1;
+
+    return {
+      opacity: isHidden ? 0 : handoffProgress.value,
+    };
+  });
+
+  const profileSheetStyle = useAnimatedStyle(() => {
+    const translateY = interpolate(
+      profileProgress.value,
+      [0, 1],
+      [screenHeight, screenHeight - profileSheetHeight],
+      Extrapolation.CLAMP,
+    );
+
+    return {
+      transform: [{ translateY }],
+    };
   });
 
   const imageStyle = useAnimatedStyle(() => {
@@ -341,6 +441,37 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
             style={[imageStyle, transitionLayerStyle, styles.transitionImage]}
             resizeMode="contain"
           />
+
+          <Animated.View
+            pointerEvents="none"
+            collapsable={false}
+            style={[
+              styles.profileOverlay,
+              { width: screenWidth, height: screenHeight },
+              profileOverlayStyle,
+            ]}
+          />
+
+          <Animated.View
+            style={[
+              styles.profileSheet,
+              { height: profileSheetHeight },
+              profileSheetStyle,
+            ]}>
+            <ProfileContent />
+          </Animated.View>
+
+          <Animated.View
+            style={[styles.footer, { width: screenWidth }, footerStyle]}
+            pointerEvents={handoffDone ? 'box-none' : 'none'}>
+            <Pressable
+              style={styles.closeButton}
+              onPress={animateClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close">
+              <Text style={styles.closeButtonText}>Close</Text>
+            </Pressable>
+          </Animated.View>
         </Animated.View>
       </GestureDetector>
     </GestureHandlerRootView>
@@ -367,6 +498,46 @@ const styles = StyleSheet.create({
   },
   transitionImage: {
     zIndex: 2,
+  },
+  profileOverlay: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    backgroundColor: '#000000',
+    zIndex: 10,
+    elevation: 10,
+  },
+  profileSheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 20,
+    elevation: 20,
+  },
+  footer: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    height: FOOTER_HEIGHT,
+    zIndex: 30,
+    elevation: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'black',
+  },
+  closeButton: {
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  closeButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
