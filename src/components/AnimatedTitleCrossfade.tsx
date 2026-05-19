@@ -1,10 +1,14 @@
-import React from 'react';
-import { StyleSheet, Text } from 'react-native';
+import React, { useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   type SharedValue,
 } from 'react-native-reanimated';
 
+import {
+  getLeaderboardListTopInset,
+  LEADERBOARD_HEADER_TITLE_TOP_PADDING,
+} from '../constants/leaderboardHeader';
 import {
   getHomeTitleOpacity,
   getLeaderboardTitleOpacity,
@@ -12,7 +16,6 @@ import {
 
 const HOME_TITLE = 'CAMERA';
 const LEADERBOARD_TITLE = 'Leaderboard';
-const TOP_BAR_TITLE_TOP_PADDING = 8;
 
 type AnimatedTitleCrossfadeProps = {
   openProgress: SharedValue<number>;
@@ -24,6 +27,8 @@ export const AnimatedTitleCrossfade = ({
   openProgress,
   safeAreaTop,
 }: AnimatedTitleCrossfadeProps) => {
+  const headerHeight = useMemo(() => getLeaderboardListTopInset(safeAreaTop), [safeAreaTop]);
+
   const homeStyle = useAnimatedStyle(() => ({
     opacity: getHomeTitleOpacity(openProgress.value),
   }));
@@ -33,14 +38,31 @@ export const AnimatedTitleCrossfade = ({
   }));
 
   return (
-    <Animated.View
-      style={[styles.host, { top: safeAreaTop + TOP_BAR_TITLE_TOP_PADDING }]}
-      pointerEvents="none">
-      <Animated.Text style={[styles.title, homeStyle]}>{HOME_TITLE}</Animated.Text>
-      <Animated.Text style={[styles.title, styles.titleOverlay, leaderboardStyle]}>
+    <View
+      style={[styles.host, { height: headerHeight }]}
+      pointerEvents="box-none">
+      <View style={styles.backdrop} pointerEvents="none">
+        <View style={styles.backdropStrong} />
+        <View style={styles.backdropFade} />
+      </View>
+      <Animated.Text
+        style={[
+          styles.title,
+          { marginTop: safeAreaTop + LEADERBOARD_HEADER_TITLE_TOP_PADDING },
+          homeStyle,
+        ]}>
+        {HOME_TITLE}
+      </Animated.Text>
+      <Animated.Text
+        style={[
+          styles.title,
+          styles.titleOverlay,
+          { top: safeAreaTop + LEADERBOARD_HEADER_TITLE_TOP_PADDING },
+          leaderboardStyle,
+        ]}>
         {LEADERBOARD_TITLE}
       </Animated.Text>
-    </Animated.View>
+    </View>
   );
 };
 
@@ -49,17 +71,33 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+    top: 0,
     alignItems: 'center',
     zIndex: 25,
     elevation: 25,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  backdropStrong: {
+    flex: 0.55,
+  },
+  backdropFade: {
+    flex: 0.45,
+    backgroundColor: 'rgba(0, 0, 0, 0)',
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#ffffff',
     textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.85)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
   titleOverlay: {
     position: 'absolute',
+    left: 0,
+    right: 0,
   },
 });

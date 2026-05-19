@@ -2,7 +2,7 @@ import {
   GRID_GAP,
   GRID_HORIZONTAL_PADDING,
   GRID_IMAGE_ASPECT,
-  GRID_LIST_PADDING_TOP,
+  GRID_HEADER_CONTENT_OFFSET,
   GRID_NUM_COLUMNS,
 } from '../constants/grid';
 import type { ImageLayoutBounds } from '../types/imageLayout';
@@ -30,7 +30,7 @@ export function getGridItemBounds(
       : screenWidth - GRID_HORIZONTAL_PADDING - imageSize;
 
   const y =
-    listTopY + GRID_LIST_PADDING_TOP + row * (imageHeight + GRID_GAP) - scrollY;
+    listTopY + GRID_HEADER_CONTENT_OFFSET + row * (imageHeight + GRID_GAP) - scrollY;
 
   return {
     x,

@@ -1,6 +1,7 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   FlatList,
+  Image,
   ListRenderItem,
   StyleSheet,
   Text,
@@ -8,10 +9,13 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { getLeaderboardListTopInset } from '../constants/leaderboardHeader';
 import { LEADERBOARD_DATA, type LeaderboardEntry } from '../data/leaderboard';
 
-const TOP_BAR_CONTENT_OFFSET = 52;
+/** ScrollView prop; FlatList types omit it but runtime supports it. */
+const scrollUnderHeaderProps = { clipToPadding: false } as const;
 
 type LeaderboardPanelProps = {
   safeAreaTop: number;
@@ -22,12 +26,27 @@ export const LeaderboardPanel = ({
   safeAreaTop,
   style,
 }: LeaderboardPanelProps) => {
+  const { bottom: safeAreaBottom } = useSafeAreaInsets();
+  const listTopInset = useMemo(() => getLeaderboardListTopInset(safeAreaTop), [safeAreaTop]);
+
+  const listContentStyle = useMemo(
+    () => [styles.listContent, { paddingTop: listTopInset, paddingBottom: safeAreaBottom + 24 }],
+    [listTopInset, safeAreaBottom],
+  );
+
+  const scrollIndicatorInsets = useMemo(
+    () => ({ top: listTopInset, bottom: safeAreaBottom }),
+    [listTopInset, safeAreaBottom],
+  );
+
   const renderItem: ListRenderItem<LeaderboardEntry> = useCallback(
-    ({ item, index }) => (
+    ({ item }) => (
       <View style={styles.row}>
-        <Text style={styles.rank}>{index + 1}</Text>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.score}>{item.score}</Text>
+        <Image source={{ uri: item.image }} style={styles.avatar} />
+        <View style={styles.info}>
+          <Text style={styles.name}>{item.name}</Text>
+          <Text style={styles.score}>{item.score}</Text>
+        </View>
       </View>
     ),
     [],
@@ -36,20 +55,17 @@ export const LeaderboardPanel = ({
   const keyExtractor = useCallback((item: LeaderboardEntry) => item.id, []);
 
   return (
-    <View
-      style={[
-        styles.panel,
-        { paddingTop: safeAreaTop + TOP_BAR_CONTENT_OFFSET },
-        style,
-      ]}>
+    <View style={[styles.panel, style]}>
       <FlatList
         data={LEADERBOARD_DATA}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        scrollIndicatorInsets={scrollIndicatorInsets}
+        contentContainerStyle={listContentStyle}
+        style={styles.list}
+        {...scrollUnderHeaderProps}
       />
-      <Text style={styles.hint}>Swipe left to close</Text>
     </View>
   );
 };
@@ -59,38 +75,37 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
+  list: {
+    flex: 1,
+  },
   listContent: {
     paddingHorizontal: 24,
-    paddingBottom: 24,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
   },
-  rank: {
-    width: 32,
-    fontSize: 17,
-    fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.65)',
+  avatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginRight: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  info: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 4,
   },
   name: {
-    flex: 1,
     fontSize: 17,
     fontWeight: '600',
     color: '#ffffff',
   },
   score: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  hint: {
-    textAlign: 'center',
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.55)',
-    paddingVertical: 16,
+    fontSize: 15,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.65)',
   },
 });

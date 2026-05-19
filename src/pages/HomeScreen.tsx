@@ -31,7 +31,7 @@ import {
   GRID_GAP,
   GRID_HORIZONTAL_PADDING,
   GRID_IMAGE_ASPECT,
-  GRID_LIST_PADDING_TOP,
+  GRID_HEADER_CONTENT_OFFSET,
   GRID_NUM_COLUMNS,
 } from '../constants/grid';
 import { getFullImageUri, IMAGE_DATA, type ImageItem } from '../data/images';
@@ -105,7 +105,7 @@ const HomeScreenContent: React.FC<NavigationProps> = ({ componentId }) => {
   const leaderboardDragDistance = screenWidth * LEADERBOARD_DRAG_DISTANCE_RATIO;
   const hiddenImageId = viewerState.getHiddenImageId();
   const listTopPadding = useMemo(
-    () => safeAreaTop + GRID_LIST_PADDING_TOP,
+    () => safeAreaTop + GRID_HEADER_CONTENT_OFFSET,
     [safeAreaTop],
   );
 
