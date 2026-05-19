@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import  { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -10,9 +10,23 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Navigation } from 'react-native-navigation';
-import type { NavigationFunctionComponent } from 'react-native-navigation';
+import { runOnJS, useSharedValue, withSpring } from 'react-native-reanimated';
+import type {
+  NavigationFunctionComponent,
+  NavigationProps,
+} from 'react-native-navigation';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AnimatedTitleCrossfade } from '../components/AnimatedTitleCrossfade';
+import { LeaderboardDragLayer } from '../components/LeaderboardDragLayer';
+import {
+  LEADERBOARD_DRAG_DISTANCE_RATIO,
+  LEADERBOARD_OPEN_SNAP_THRESHOLD,
+  LEADERBOARD_OPEN_SPRING,
+  LEADERBOARD_OPEN_VELOCITY_THRESHOLD,
+} from '../constants/leaderboard';
 import {
   GRID_GAP,
   GRID_HORIZONTAL_PADDING,
@@ -21,6 +35,8 @@ import {
   GRID_NUM_COLUMNS,
 } from '../constants/grid';
 import { getFullImageUri, IMAGE_DATA, type ImageItem } from '../data/images';
+import { homeScreenOptions } from '../navigation/homeScreenOptions';
+import { leaderboardScreenOptions } from '../navigation/leaderboardScreenOptions';
 import { ScreenNames } from '../navigation/screenNames';
 import { secondScreenOptions } from '../navigation/secondScreenOptions';
 import { viewerState } from '../state/viewerState';
@@ -40,6 +56,10 @@ const GridImageItem = ({ item, imageSize, isHidden, onOpen }: GridImageItemProps
 
   const handlePress = () => {
     cardRef.current?.measureInWindow((x, y, width, height) => {
+      if (!width || !height) {
+        return;
+      }
+
       onOpen(item, { x, y, width, height });
     });
   };
@@ -69,14 +89,29 @@ const GridImageItem = ({ item, imageSize, isHidden, onOpen }: GridImageItemProps
   );
 };
 
-const HomeScreen: NavigationFunctionComponent = () => {
+const HomeScreenContent: React.FC<NavigationProps> = ({ componentId }) => {
   const { width: screenWidth } = useWindowDimensions();
   const listRef = useRef<View>(null);
   const scrollYRef = useRef(0);
   const [, refreshHiddenState] = useReducer((count: number) => count + 1, 0);
+  const { top: safeAreaTop } = useSafeAreaInsets();
+  const [isLeaderboardPushed, setIsLeaderboardPushed] = useState(false);
+
+  const leaderboardOpenProgress = useSharedValue(0);
+  const leaderboardGestureStart = useSharedValue(0);
+  const isLeaderboardPushedSv = useSharedValue(0);
 
   const imageSize = useMemo(() => getGridImageSize(screenWidth), [screenWidth]);
+  const leaderboardDragDistance = screenWidth * LEADERBOARD_DRAG_DISTANCE_RATIO;
   const hiddenImageId = viewerState.getHiddenImageId();
+  const listTopPadding = useMemo(
+    () => safeAreaTop + GRID_LIST_PADDING_TOP,
+    [safeAreaTop],
+  );
+
+  useEffect(() => {
+    Navigation.mergeOptions(componentId, homeScreenOptions);
+  }, [componentId]);
 
   useEffect(() => {
     return viewerState.subscribe(refreshHiddenState);
@@ -87,6 +122,23 @@ const HomeScreen: NavigationFunctionComponent = () => {
       ({ commandName }) => {
         if (commandName === 'dismissOverlay') {
           viewerState.clearHiddenImage();
+
+          if (isLeaderboardPushedSv.value === 1) {
+            isLeaderboardPushedSv.value = 0;
+            setIsLeaderboardPushed(false);
+            leaderboardOpenProgress.value = 0;
+          }
+        }
+      },
+    );
+
+    const appearSubscription = Navigation.events().registerComponentDidAppearListener(
+      ({ componentName }) => {
+        if (componentName === ScreenNames.Leaderboard) {
+          isLeaderboardPushedSv.value = 1;
+          requestAnimationFrame(() => {
+            setIsLeaderboardPushed(true);
+          });
         }
       },
     );
@@ -96,18 +148,93 @@ const HomeScreen: NavigationFunctionComponent = () => {
         if (componentName === ScreenNames.Second) {
           viewerState.clearHiddenImage();
         }
+
+        if (componentName === ScreenNames.Leaderboard) {
+          isLeaderboardPushedSv.value = 0;
+          setIsLeaderboardPushed(false);
+          leaderboardOpenProgress.value = 0;
+        }
       },
     );
 
     return () => {
       commandSubscription.remove();
+      appearSubscription.remove();
       disappearSubscription.remove();
     };
-  }, []);
+  }, [isLeaderboardPushedSv, leaderboardOpenProgress]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     scrollYRef.current = event.nativeEvent.contentOffset.y;
   }, []);
+
+  const openLeaderboard = useCallback((progress: number) => {
+    isLeaderboardPushedSv.value = 1;
+    setIsLeaderboardPushed(true);
+
+    Navigation.showOverlay({
+      component: {
+        name: ScreenNames.Leaderboard,
+        passProps: { initialProgress: progress },
+        options: leaderboardScreenOptions,
+      },
+    });
+  }, [isLeaderboardPushedSv]);
+
+  const leaderboardOpenGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX(15)
+        .failOffsetY([-18, 18])
+        .onStart(() => {
+          if (isLeaderboardPushedSv.value === 1) {
+            return;
+          }
+
+          leaderboardGestureStart.value = leaderboardOpenProgress.value;
+        })
+        .onUpdate(event => {
+          if (isLeaderboardPushedSv.value === 1 || event.translationX <= 0) {
+            return;
+          }
+
+          const nextProgress =
+            leaderboardGestureStart.value +
+            Math.min(
+              event.translationX / leaderboardDragDistance,
+              1 - leaderboardGestureStart.value,
+            );
+
+          leaderboardOpenProgress.value = Math.min(1, nextProgress);
+        })
+        .onEnd(event => {
+          if (isLeaderboardPushedSv.value === 1) {
+            return;
+          }
+
+          const shouldOpen =
+            leaderboardOpenProgress.value > LEADERBOARD_OPEN_SNAP_THRESHOLD ||
+            event.velocityX > LEADERBOARD_OPEN_VELOCITY_THRESHOLD;
+
+          if (shouldOpen) {
+            if (leaderboardOpenProgress.value < 1) {
+              leaderboardOpenProgress.value = 1;
+            }
+
+            runOnJS(openLeaderboard)(leaderboardOpenProgress.value);
+            return;
+          }
+
+          leaderboardOpenProgress.value = withSpring(0, LEADERBOARD_OPEN_SPRING);
+        }),
+    [
+      isLeaderboardPushedSv,
+      leaderboardDragDistance,
+      leaderboardGestureStart,
+      leaderboardOpenProgress,
+      openLeaderboard,
+    ],
+  );
 
   const openImageScreen = useCallback(
     (item: ImageItem, sourceBounds: ImageLayoutBounds) => {
@@ -157,44 +284,62 @@ const HomeScreen: NavigationFunctionComponent = () => {
   );
 
   return (
-    <View style={styles.container}>
-      <View ref={listRef} style={styles.listWrapper}>
-        <FlatList
-          data={IMAGE_DATA}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          numColumns={GRID_NUM_COLUMNS}
-          columnWrapperStyle={styles.row}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
-          extraData={hiddenImageId}
-        />
-      </View>
-    </View>
+    <GestureHandlerRootView style={styles.container}>
+      <GestureDetector gesture={leaderboardOpenGesture}>
+        <View style={styles.container}>
+          {!isLeaderboardPushed ? (
+            <AnimatedTitleCrossfade
+              openProgress={leaderboardOpenProgress}
+              safeAreaTop={safeAreaTop}
+            />
+          ) : null}
+
+          <View ref={listRef} style={styles.listWrapper}>
+            <FlatList
+              data={IMAGE_DATA}
+              renderItem={renderItem}
+              keyExtractor={keyExtractor}
+              numColumns={GRID_NUM_COLUMNS}
+              columnWrapperStyle={styles.row}
+              contentContainerStyle={[styles.listContent, { paddingTop: listTopPadding }]}
+              contentInsetAdjustmentBehavior="never"
+              showsVerticalScrollIndicator={false}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              extraData={hiddenImageId}
+            />
+          </View>
+
+          {!isLeaderboardPushed ? (
+            <LeaderboardDragLayer
+              openProgress={leaderboardOpenProgress}
+              safeAreaTop={safeAreaTop}
+            />
+          ) : null}
+        </View>
+      </GestureDetector>
+    </GestureHandlerRootView>
   );
 };
 
-HomeScreen.options = {
-  topBar: {
-    title: {
-      text: 'Home',
-    },
-  },
-};
+const HomeScreen: NavigationFunctionComponent = props => (
+  <SafeAreaProvider>
+    <HomeScreenContent {...props} />
+  </SafeAreaProvider>
+);
+
+HomeScreen.options = homeScreenOptions;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'black',
   },
   listWrapper: {
     flex: 1,
   },
   listContent: {
     paddingHorizontal: GRID_HORIZONTAL_PADDING,
-    paddingTop: GRID_LIST_PADDING_TOP,
     paddingBottom: 16,
   },
   row: {
@@ -207,7 +352,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eeeeee',
   },
   cardWithoutImage: {
-    backgroundColor: '#ffffff',
+    backgroundColor: 'black',
   },
   image: {
     borderRadius: 8,

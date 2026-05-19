@@ -25,23 +25,23 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { getFullImageUri, type ImageItem } from '../data/images';
+import { getFullImageUri, IMAGE_DATA, type ImageItem } from '../data/images';
 import { PROFILE_BACKDROP_MAX_OPACITY } from '../constants/profile';
 import { ProfileContent } from './ProfileScreen';
 import { secondScreenOptions } from '../navigation/secondScreenOptions';
 import { viewerState } from '../state/viewerState';
 import type { ImageLayoutBounds } from '../types/imageLayout';
-import { getGridItemBounds } from '../utils/getGridItemBounds';
+import { getGridImageSize, getGridItemBounds } from '../utils/getGridItemBounds';
 import { getImageTargetBounds } from '../utils/getImageTargetBounds';
 
 type SecondScreenProps = {
-  images: ImageItem[];
-  initialIndex: number;
-  thumbnailUri: string;
-  sourceBounds: ImageLayoutBounds;
-  listTopY: number;
-  scrollY: number;
-  imageSize: number;
+  images?: ImageItem[];
+  initialIndex?: number;
+  thumbnailUri?: string;
+  sourceBounds?: ImageLayoutBounds;
+  listTopY?: number;
+  scrollY?: number;
+  imageSize?: number;
 };
 
 const DISMISS_DRAG_THRESHOLD = 120;
@@ -73,17 +73,43 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
   componentId,
   images,
   initialIndex,
-  thumbnailUri,
   sourceBounds,
   listTopY,
   scrollY,
   imageSize,
 }) => {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const resolvedImages = images?.length ? images : IMAGE_DATA;
+  const resolvedInitialIndex = initialIndex ?? 0;
+  const resolvedImageSize = imageSize ?? getGridImageSize(screenWidth);
+  const resolvedListTopY = listTopY ?? 0;
+  const resolvedScrollY = scrollY ?? 0;
+
+  const resolvedSourceBounds = useMemo((): ImageLayoutBounds => {
+    if (sourceBounds?.width && sourceBounds?.height) {
+      return sourceBounds;
+    }
+
+    return getGridItemBounds(
+      resolvedInitialIndex,
+      screenWidth,
+      resolvedImageSize,
+      resolvedListTopY,
+      resolvedScrollY,
+    );
+  }, [
+    resolvedImageSize,
+    resolvedInitialIndex,
+    resolvedListTopY,
+    resolvedScrollY,
+    screenWidth,
+    sourceBounds,
+  ]);
+
+  const [currentIndex, setCurrentIndex] = useState(resolvedInitialIndex);
   const [handoffDone, setHandoffDone] = useState(false);
   const [isClosingState, setIsClosingState] = useState(false);
-  const currentIndexRef = useRef(initialIndex);
+  const currentIndexRef = useRef(resolvedInitialIndex);
 
   const openProgress = useSharedValue(0);
   const morphProgress = useSharedValue(0);
@@ -92,7 +118,7 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
   const isClosing = useSharedValue(0);
-  const activeSourceBounds = useSharedValue(sourceBounds);
+  const activeSourceBounds = useSharedValue(resolvedSourceBounds);
   const profileProgress = useSharedValue(0);
   const profileBackdropOpacity = useSharedValue(0);
   const profileGestureStart = useSharedValue(0);
@@ -105,23 +131,41 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
       getImageTargetBounds(
         screenWidth,
         screenHeight,
-        sourceBounds.width / sourceBounds.height,
+        resolvedSourceBounds.width / resolvedSourceBounds.height,
       ),
-    [screenWidth, screenHeight, sourceBounds.height, sourceBounds.width],
+    [
+      screenWidth,
+      screenHeight,
+      resolvedSourceBounds.height,
+      resolvedSourceBounds.width,
+    ],
   );
 
   const resolveSourceBounds = useCallback(
     (index: number): ImageLayoutBounds => {
-      if (index === initialIndex) {
-        return sourceBounds;
+      if (index === resolvedInitialIndex) {
+        return resolvedSourceBounds;
       }
 
-      return getGridItemBounds(index, screenWidth, imageSize, listTopY, scrollY);
+      return getGridItemBounds(
+        index,
+        screenWidth,
+        resolvedImageSize,
+        resolvedListTopY,
+        resolvedScrollY,
+      );
     },
-    [imageSize, initialIndex, listTopY, screenWidth, scrollY, sourceBounds],
+    [
+      resolvedImageSize,
+      resolvedInitialIndex,
+      resolvedListTopY,
+      resolvedScrollY,
+      resolvedSourceBounds,
+      screenWidth,
+    ],
   );
 
-  const currentItem = images[currentIndex] ?? images[0];
+  const currentItem = resolvedImages[currentIndex] ?? resolvedImages[0];
   const transitionUri =
     isClosingState || handoffDone
       ? getFullImageUri(currentItem.uri)
@@ -129,8 +173,8 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
 
   useEffect(() => {
     Navigation.mergeOptions(componentId, secondScreenOptions);
-    activeSourceBounds.value = sourceBounds;
-    viewerState.setHiddenImageId(images[initialIndex]?.id ?? null);
+    activeSourceBounds.value = resolvedSourceBounds;
+    viewerState.setHiddenImageId(resolvedImages[resolvedInitialIndex]?.id ?? null);
 
     const disappearSubscription = Navigation.events().registerComponentDidDisappearListener(
       event => {
@@ -140,7 +184,7 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
       },
     );
 
-    images.forEach(item => {
+    resolvedImages.forEach(item => {
       Image.prefetch(getFullImageUri(item.uri));
     });
 
@@ -174,12 +218,13 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
   }, [
     activeSourceBounds,
     componentId,
-    images,
+    resolvedImages,
+    resolvedInitialIndex,
+    resolvedSourceBounds,
     backdropOpacity,
     morphProgress,
     openProgress,
     handoffProgress,
-    sourceBounds,
   ]);
 
   const restoreGridThumbnail = useCallback(() => {
@@ -310,16 +355,16 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const index = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
 
-      if (index < 0 || index >= images.length) {
+      if (index < 0 || index >= resolvedImages.length) {
         return;
       }
 
       setCurrentIndex(index);
       currentIndexRef.current = index;
       activeSourceBounds.value = resolveSourceBounds(index);
-      viewerState.setHiddenImageId(images[index].id);
+      viewerState.setHiddenImageId(resolvedImages[index].id);
     },
-    [activeSourceBounds, images, resolveSourceBounds, screenWidth],
+    [activeSourceBounds, resolvedImages, resolveSourceBounds, screenWidth],
   );
 
   const backdropStyle = useAnimatedStyle(() => {
@@ -379,6 +424,10 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
     const m = morphProgress.value;
     const source = activeSourceBounds.value;
 
+    if (!source?.width || !source?.height) {
+      return { opacity: 0 };
+    }
+
     const width = source.width + (targetBounds.width - source.width) * m;
     const height = source.height + (targetBounds.height - source.height) * m;
     const x = source.x + (targetBounds.x - source.x) * m;
@@ -421,10 +470,10 @@ const SecondScreen: NavigationFunctionComponent<SecondScreenProps> = ({
               horizontal
               pagingEnabled
               bounces={false}
-              data={images}
+              data={resolvedImages}
               renderItem={renderGalleryItem}
               keyExtractor={item => item.id}
-              initialScrollIndex={initialIndex}
+              initialScrollIndex={resolvedInitialIndex}
               getItemLayout={(_, index) => ({
                 length: screenWidth,
                 offset: screenWidth * index,
