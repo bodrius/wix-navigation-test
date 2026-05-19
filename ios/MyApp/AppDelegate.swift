@@ -1,33 +1,19 @@
 import UIKit
 import React
-import React_RCTAppDelegate
+import ReactNativeNavigation
 import ReactAppDependencyProvider
 
 @main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-  var window: UIWindow?
+class AppDelegate: RNNAppDelegate {
 
-  var reactNativeDelegate: ReactNativeDelegate?
-  var reactNativeFactory: RCTReactNativeFactory?
-
-  func application(
+  override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
-    let delegate = ReactNativeDelegate()
-    let factory = RCTReactNativeFactory(delegate: delegate)
-    delegate.dependencyProvider = RCTAppDependencyProvider()
+    self.reactNativeDelegate = ReactNativeDelegate()
+    super.application(application, didFinishLaunchingWithOptions: launchOptions)
 
-    reactNativeDelegate = delegate
-    reactNativeFactory = factory
-
-    window = UIWindow(frame: UIScreen.main.bounds)
-
-    factory.startReactNative(
-      withModuleName: "MyApp",
-      in: window,
-      launchOptions: launchOptions
-    )
+    
 
     return true
   }

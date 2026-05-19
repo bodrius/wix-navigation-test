@@ -3,16 +3,20 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
+    "android": "cd android && ./gradlew app:assembleDebug && ./gradlew installDebug",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest"
   },
   "dependencies": {
+    "@react-native/new-app-screen": "0.80.3",
     "react": "19.1.0",
     "react-native": "0.80.3",
-    "@react-native/new-app-screen": "0.80.3"
+    "react-native-gesture-handler": "^2.28.0",
+    "react-native-navigation": "^8.8.3",
+    "react-native-reanimated": "^3.19.5",
+    "react-native-safe-area-context": "^5.8.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

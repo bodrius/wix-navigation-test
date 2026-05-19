@@ -2,8 +2,14 @@
  * @format
  */
 
-import { AppRegistry } from 'react-native';
-import App from './App';
-import { name as appName } from './app.json';
+import 'react-native-gesture-handler';
+import { Navigation } from 'react-native-navigation';
 
-AppRegistry.registerComponent(appName, () => App);
+import { registerScreens } from './src/navigation/registerScreens';
+import { setAppRoot } from './src/navigation/setAppRoot';
+
+registerScreens();
+
+Navigation.events().registerAppLaunchedListener(() => {
+  setAppRoot();
+});
