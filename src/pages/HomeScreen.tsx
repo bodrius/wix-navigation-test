@@ -12,7 +12,12 @@ import {
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Navigation } from 'react-native-navigation';
-import { runOnJS, useSharedValue, withSpring } from 'react-native-reanimated';
+import {
+  runOnJS,
+  useAnimatedReaction,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import type {
   NavigationFunctionComponent,
   NavigationProps,
@@ -39,6 +44,12 @@ import { homeScreenOptions } from '../navigation/homeScreenOptions';
 import { leaderboardScreenOptions } from '../navigation/leaderboardScreenOptions';
 import { ScreenNames } from '../navigation/screenNames';
 import { secondScreenOptions } from '../navigation/secondScreenOptions';
+import {
+  isLeaderboardOpening,
+  isLeaderboardOverlayOpen,
+  leaderboardOpenProgress,
+  resetLeaderboardTransition,
+} from '../state/leaderboardTransitionState';
 import { viewerState } from '../state/viewerState';
 import type { ImageLayoutBounds } from '../types/imageLayout';
 import { getGridImageSize } from '../utils/getGridItemBounds';
@@ -95,11 +106,19 @@ const HomeScreenContent: React.FC<NavigationProps> = ({ componentId }) => {
   const scrollYRef = useRef(0);
   const [, refreshHiddenState] = useReducer((count: number) => count + 1, 0);
   const { top: safeAreaTop } = useSafeAreaInsets();
-  const [isLeaderboardPushed, setIsLeaderboardPushed] = useState(false);
 
-  const leaderboardOpenProgress = useSharedValue(0);
   const leaderboardGestureStart = useSharedValue(0);
-  const isLeaderboardPushedSv = useSharedValue(0);
+  const [isHomeLeaderboardLayerActive, setIsHomeLeaderboardLayerActive] = useState(true);
+
+  useAnimatedReaction(
+    () => isLeaderboardOverlayOpen.value === 0,
+    (isActive, previous) => {
+      if (isActive !== previous) {
+        runOnJS(setIsHomeLeaderboardLayerActive)(isActive);
+      }
+    },
+    [],
+  );
 
   const imageSize = useMemo(() => getGridImageSize(screenWidth), [screenWidth]);
   const leaderboardDragDistance = screenWidth * LEADERBOARD_DRAG_DISTANCE_RATIO;
@@ -118,31 +137,6 @@ const HomeScreenContent: React.FC<NavigationProps> = ({ componentId }) => {
   }, []);
 
   useEffect(() => {
-    const commandSubscription = Navigation.events().registerCommandCompletedListener(
-      ({ commandName }) => {
-        if (commandName === 'dismissOverlay') {
-          viewerState.clearHiddenImage();
-
-          if (isLeaderboardPushedSv.value === 1) {
-            isLeaderboardPushedSv.value = 0;
-            setIsLeaderboardPushed(false);
-            leaderboardOpenProgress.value = 0;
-          }
-        }
-      },
-    );
-
-    const appearSubscription = Navigation.events().registerComponentDidAppearListener(
-      ({ componentName }) => {
-        if (componentName === ScreenNames.Leaderboard) {
-          isLeaderboardPushedSv.value = 1;
-          requestAnimationFrame(() => {
-            setIsLeaderboardPushed(true);
-          });
-        }
-      },
-    );
-
     const disappearSubscription = Navigation.events().registerComponentDidDisappearListener(
       ({ componentName }) => {
         if (componentName === ScreenNames.Second) {
@@ -150,36 +144,30 @@ const HomeScreenContent: React.FC<NavigationProps> = ({ componentId }) => {
         }
 
         if (componentName === ScreenNames.Leaderboard) {
-          isLeaderboardPushedSv.value = 0;
-          setIsLeaderboardPushed(false);
-          leaderboardOpenProgress.value = 0;
+          resetLeaderboardTransition();
         }
       },
     );
 
     return () => {
-      commandSubscription.remove();
-      appearSubscription.remove();
       disappearSubscription.remove();
     };
-  }, [isLeaderboardPushedSv, leaderboardOpenProgress]);
+  }, []);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     scrollYRef.current = event.nativeEvent.contentOffset.y;
   }, []);
 
-  const openLeaderboard = useCallback((progress: number) => {
-    isLeaderboardPushedSv.value = 1;
-    setIsLeaderboardPushed(true);
+  const openLeaderboard = useCallback(() => {
+    isLeaderboardOpening.value = 1;
 
     Navigation.showOverlay({
       component: {
         name: ScreenNames.Leaderboard,
-        passProps: { initialProgress: progress },
         options: leaderboardScreenOptions,
       },
     });
-  }, [isLeaderboardPushedSv]);
+  }, []);
 
   const leaderboardOpenGesture = useMemo(
     () =>
@@ -187,14 +175,21 @@ const HomeScreenContent: React.FC<NavigationProps> = ({ componentId }) => {
         .activeOffsetX(15)
         .failOffsetY([-18, 18])
         .onStart(() => {
-          if (isLeaderboardPushedSv.value === 1) {
+          if (
+            isLeaderboardOverlayOpen.value === 1 ||
+            isLeaderboardOpening.value === 1
+          ) {
             return;
           }
 
           leaderboardGestureStart.value = leaderboardOpenProgress.value;
         })
         .onUpdate(event => {
-          if (isLeaderboardPushedSv.value === 1 || event.translationX <= 0) {
+          if (
+            isLeaderboardOverlayOpen.value === 1 ||
+            isLeaderboardOpening.value === 1 ||
+            event.translationX <= 0
+          ) {
             return;
           }
 
@@ -208,7 +203,10 @@ const HomeScreenContent: React.FC<NavigationProps> = ({ componentId }) => {
           leaderboardOpenProgress.value = Math.min(1, nextProgress);
         })
         .onEnd(event => {
-          if (isLeaderboardPushedSv.value === 1) {
+          if (
+            isLeaderboardOverlayOpen.value === 1 ||
+            isLeaderboardOpening.value === 1
+          ) {
             return;
           }
 
@@ -218,22 +216,21 @@ const HomeScreenContent: React.FC<NavigationProps> = ({ componentId }) => {
 
           if (shouldOpen) {
             if (leaderboardOpenProgress.value < 1) {
-              leaderboardOpenProgress.value = 1;
+              leaderboardOpenProgress.value = withSpring(1, LEADERBOARD_OPEN_SPRING, finished => {
+                if (finished) {
+                  runOnJS(openLeaderboard)();
+                }
+              });
+            } else {
+              runOnJS(openLeaderboard)();
             }
 
-            runOnJS(openLeaderboard)(leaderboardOpenProgress.value);
             return;
           }
 
           leaderboardOpenProgress.value = withSpring(0, LEADERBOARD_OPEN_SPRING);
         }),
-    [
-      isLeaderboardPushedSv,
-      leaderboardDragDistance,
-      leaderboardGestureStart,
-      leaderboardOpenProgress,
-      openLeaderboard,
-    ],
+    [leaderboardDragDistance, leaderboardGestureStart, openLeaderboard],
   );
 
   const openImageScreen = useCallback(
@@ -287,11 +284,8 @@ const HomeScreenContent: React.FC<NavigationProps> = ({ componentId }) => {
     <GestureHandlerRootView style={styles.container}>
       <GestureDetector gesture={leaderboardOpenGesture}>
         <View style={styles.container}>
-          {!isLeaderboardPushed ? (
-            <AnimatedTitleCrossfade
-              openProgress={leaderboardOpenProgress}
-              safeAreaTop={safeAreaTop}
-            />
+          {isHomeLeaderboardLayerActive ? (
+            <AnimatedTitleCrossfade safeAreaTop={safeAreaTop} showOnHomeLayer />
           ) : null}
 
           <View ref={listRef} style={styles.listWrapper}>
@@ -310,11 +304,8 @@ const HomeScreenContent: React.FC<NavigationProps> = ({ componentId }) => {
             />
           </View>
 
-          {!isLeaderboardPushed ? (
-            <LeaderboardDragLayer
-              openProgress={leaderboardOpenProgress}
-              safeAreaTop={safeAreaTop}
-            />
+          {isHomeLeaderboardLayerActive ? (
+            <LeaderboardDragLayer safeAreaTop={safeAreaTop} />
           ) : null}
         </View>
       </GestureDetector>

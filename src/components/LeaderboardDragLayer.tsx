@@ -4,32 +4,29 @@ import Animated, {
   Extrapolation,
   interpolate,
   useAnimatedStyle,
-  type SharedValue,
 } from 'react-native-reanimated';
 
 import { LEADERBOARD_BACKDROP_MAX_OPACITY } from '../constants/leaderboard';
+import {
+  isLeaderboardOverlayOpen,
+  leaderboardOpenProgress,
+} from '../state/leaderboardTransitionState';
 import { LeaderboardPanel } from './LeaderboardPanel';
 
 type LeaderboardDragLayerProps = {
-  openProgress: SharedValue<number>;
   safeAreaTop: number;
 };
 
-export const LeaderboardDragLayer = ({
-  openProgress,
-  safeAreaTop,
-}: LeaderboardDragLayerProps) => {
+export const LeaderboardDragLayer = ({ safeAreaTop }: LeaderboardDragLayerProps) => {
   const { width: screenWidth } = useWindowDimensions();
 
-  const overlayStyle = useAnimatedStyle(() => {
-    const opacity = openProgress.value * LEADERBOARD_BACKDROP_MAX_OPACITY;
-
-    return { opacity };
-  });
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: leaderboardOpenProgress.value * LEADERBOARD_BACKDROP_MAX_OPACITY,
+  }));
 
   const panelStyle = useAnimatedStyle(() => {
     const translateX = interpolate(
-      openProgress.value,
+      leaderboardOpenProgress.value,
       [0, 1],
       [-screenWidth, 0],
       Extrapolation.CLAMP,
@@ -39,9 +36,10 @@ export const LeaderboardDragLayer = ({
   });
 
   const layerStyle = useAnimatedStyle(() => {
-    return {
-      opacity: openProgress.value > 0 ? 1 : 0,
-    };
+    const isVisible =
+      leaderboardOpenProgress.value > 0 && isLeaderboardOverlayOpen.value === 0;
+
+    return { opacity: isVisible ? 1 : 0 };
   });
 
   return (
@@ -52,7 +50,6 @@ export const LeaderboardDragLayer = ({
       <Animated.View style={[styles.panelHost, { width: screenWidth }, panelStyle]}>
         <LeaderboardPanel safeAreaTop={safeAreaTop} />
       </Animated.View>
-
     </Animated.View>
   );
 };

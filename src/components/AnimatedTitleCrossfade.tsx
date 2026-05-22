@@ -1,14 +1,15 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  type SharedValue,
-} from 'react-native-reanimated';
+import { StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import {
   getLeaderboardListTopInset,
   LEADERBOARD_HEADER_TITLE_TOP_PADDING,
 } from '../constants/leaderboardHeader';
+import {
+  isLeaderboardOverlayOpen,
+  leaderboardOpenProgress,
+} from '../state/leaderboardTransitionState';
 import {
   getHomeTitleOpacity,
   getLeaderboardTitleOpacity,
@@ -18,28 +19,35 @@ const HOME_TITLE = 'CAMERA';
 const LEADERBOARD_TITLE = 'Leaderboard';
 
 type AnimatedTitleCrossfadeProps = {
-  openProgress: SharedValue<number>;
   safeAreaTop: number;
+  /** Home header vs overlay header — only one visible at a time. */
+  showOnHomeLayer?: boolean;
 };
 
-/** Single header slot: CAMERA and Leaderboard crossfade in place (reverse on close). */
 export const AnimatedTitleCrossfade = ({
-  openProgress,
   safeAreaTop,
+  showOnHomeLayer = true,
 }: AnimatedTitleCrossfadeProps) => {
   const headerHeight = useMemo(() => getLeaderboardListTopInset(safeAreaTop), [safeAreaTop]);
 
   const homeStyle = useAnimatedStyle(() => ({
-    opacity: getHomeTitleOpacity(openProgress.value),
+    opacity: getHomeTitleOpacity(leaderboardOpenProgress.value),
   }));
 
   const leaderboardStyle = useAnimatedStyle(() => ({
-    opacity: getLeaderboardTitleOpacity(openProgress.value),
+    opacity: getLeaderboardTitleOpacity(leaderboardOpenProgress.value),
   }));
 
+  const hostStyle = useAnimatedStyle(() => {
+    const onHome = isLeaderboardOverlayOpen.value === 0;
+    const isVisible = showOnHomeLayer ? onHome : !onHome;
+
+    return { opacity: isVisible ? 1 : 0 };
+  });
+
   return (
-    <View
-      style={[styles.host, { height: headerHeight }]}
+    <Animated.View
+      style={[styles.host, { height: headerHeight }, hostStyle]}
       pointerEvents="box-none">
       <View style={styles.backdrop} pointerEvents="none">
         <View style={styles.backdropStrong} />
@@ -62,7 +70,7 @@ export const AnimatedTitleCrossfade = ({
         ]}>
         {LEADERBOARD_TITLE}
       </Animated.Text>
-    </View>
+    </Animated.View>
   );
 };
 

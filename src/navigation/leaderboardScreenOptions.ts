@@ -17,4 +17,14 @@ export const leaderboardScreenOptions: Options = {
   overlay: {
     interceptTouchOutside: false,
   },
+  animations: {
+    showOverlay: {
+      alpha: { from: 0, to: 0, duration: 0 },
+      translationX: { from: 0, to: 0, duration: 0 },
+    },
+    dismissOverlay: {
+      alpha: { from: 0, to: 0, duration: 0 },
+      translationX: { from: 0, to: 0, duration: 0 },
+    },
+  },
 };

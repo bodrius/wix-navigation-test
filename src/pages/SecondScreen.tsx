@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
     elevation: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'black',
+    backgroundColor: 'red',
   },
   closeButton: {
     paddingHorizontal: 28,
