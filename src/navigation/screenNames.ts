@@ -3,4 +3,5 @@ export const ScreenNames = {
   Second: 'MyApp.SecondScreen',
   Profile: 'MyApp.ProfileScreen',
   Leaderboard: 'MyApp.LeaderboardScreen',
+  SelectedLeaderBoard: 'MyApp.SelectedLeaderBoardScreen',
 } as const;

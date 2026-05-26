@@ -3,16 +3,20 @@ import {
   FlatList,
   Image,
   ListRenderItem,
+  Pressable,
   StyleSheet,
   Text,
   View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { Navigation } from 'react-native-navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getLeaderboardListTopInset } from '../constants/leaderboardHeader';
 import { LEADERBOARD_DATA, type LeaderboardEntry } from '../data/leaderboard';
+import { ScreenNames } from '../navigation/screenNames';
+import { slideOverlayOptions } from '../navigation/slideOverlayOptions';
 
 /** ScrollView prop; FlatList types omit it but runtime supports it. */
 const scrollUnderHeaderProps = { clipToPadding: false } as const;
@@ -39,17 +43,31 @@ export const LeaderboardPanel = ({
     [listTopInset, safeAreaBottom],
   );
 
+  const handleItemPress = useCallback((item: LeaderboardEntry) => {
+    Navigation.showOverlay({
+      component: {
+        name: ScreenNames.SelectedLeaderBoard,
+        passProps: {
+          name: item.name,
+          score: item.score,
+          image: item.image,
+        },
+        options: slideOverlayOptions,
+      },
+    });
+  }, []);
+
   const renderItem: ListRenderItem<LeaderboardEntry> = useCallback(
     ({ item }) => (
-      <View style={styles.row}>
+      <Pressable style={styles.row} onPress={() => handleItemPress(item)}>
         <Image source={{ uri: item.image }} style={styles.avatar} />
         <View style={styles.info}>
           <Text style={styles.name}>{item.name}</Text>
           <Text style={styles.score}>{item.score}</Text>
         </View>
-      </View>
+      </Pressable>
     ),
-    [],
+    [handleItemPress],
   );
 
   const keyExtractor = useCallback((item: LeaderboardEntry) => item.id, []);

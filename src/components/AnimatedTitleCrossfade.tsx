@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { Extrapolation, interpolate, useAnimatedStyle } from 'react-native-reanimated';
 
 import {
   getLeaderboardListTopInset,
@@ -10,6 +10,7 @@ import {
   isLeaderboardOverlayOpen,
   leaderboardOpenProgress,
 } from '../state/leaderboardTransitionState';
+import { profileOpenProgress } from '../state/profileTransitionState';
 import {
   getHomeTitleOpacity,
   getLeaderboardTitleOpacity,
@@ -35,7 +36,9 @@ export const AnimatedTitleCrossfade = ({
   }));
 
   const leaderboardStyle = useAnimatedStyle(() => ({
-    opacity: getLeaderboardTitleOpacity(leaderboardOpenProgress.value),
+    opacity:
+      getLeaderboardTitleOpacity(leaderboardOpenProgress.value) *
+      interpolate(profileOpenProgress.value, [0, 0.5], [1, 0], Extrapolation.CLAMP),
   }));
 
   const hostStyle = useAnimatedStyle(() => {
