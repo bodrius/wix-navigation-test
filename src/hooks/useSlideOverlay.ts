@@ -6,7 +6,6 @@ import {
   Extrapolation,
   interpolate,
   runOnJS,
-  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -34,19 +33,10 @@ export const useSlideOverlay = ({
 }: UseSlideOverlayOptions) => {
   const { width: screenWidth } = useWindowDimensions();
 
-  const openProgress = useSharedValue(0);
+  const internalOpenProgress = useSharedValue(externalProgress?.value ?? 0);
+  const openProgress = externalProgress ?? internalOpenProgress;
   const gestureStart = useSharedValue(0);
   const [overlayReady, setOverlayReady] = useState(false);
-
-  useAnimatedReaction(
-    () => openProgress.value,
-    current => {
-      if (externalProgress) {
-        externalProgress.value = current;
-      }
-    },
-    [externalProgress],
-  );
 
   const closeScreen = useCallback(() => {
     Navigation.dismissOverlay(componentId);
@@ -62,7 +52,9 @@ export const useSlideOverlay = ({
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      openProgress.value = withSpring(1, LEADERBOARD_OPEN_SPRING);
+      if (openProgress.value <= 0) {
+        openProgress.value = withSpring(1, LEADERBOARD_OPEN_SPRING);
+      }
       setOverlayReady(true);
     });
 

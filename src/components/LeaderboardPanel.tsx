@@ -1,9 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
   ListRenderItem,
-  Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -12,15 +11,15 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Navigation } from 'react-native-navigation';
-import Animated, {
-  Extrapolation,
-  interpolate,
-  useAnimatedStyle,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  LEADERBOARD_OPEN_SPRING,
+  LEADERBOARD_OPEN_VELOCITY_THRESHOLD,
+} from '../constants/leaderboard';
 import { getLeaderboardListTopInset } from '../constants/leaderboardHeader';
 import { LEADERBOARD_DATA, type LeaderboardEntry } from '../data/leaderboard';
+import { ListRowAnimation } from './ListRowAnimation';
 import { ScreenNames } from '../navigation/screenNames';
 import { slideOverlayOptions } from '../navigation/slideOverlayOptions';
 import { profileOpenProgress } from '../state/profileTransitionState';
@@ -36,32 +35,44 @@ type LeaderboardPanelProps = {
 type LeaderboardRowProps = {
   item: LeaderboardEntry;
   isActive: boolean;
+  screenWidth: number;
   travelDistance: number;
+  onPressIn: (item: LeaderboardEntry) => void;
+  onDragOpen: (item: LeaderboardEntry) => void;
   onPress: (item: LeaderboardEntry) => void;
+  onSwipeCancel: () => void;
 };
 
-const LeaderboardRow = ({ item, isActive, travelDistance, onPress }: LeaderboardRowProps) => {
-  const rowStyle = useAnimatedStyle(() => {
-    const translateX = isActive
-      ? interpolate(profileOpenProgress.value, [0, 1], [0, travelDistance], Extrapolation.CLAMP)
-      : 0;
-
-    return {
-      transform: [{ translateX }],
-      zIndex: isActive ? 20 : 1,
-    };
-  }, [isActive, travelDistance]);
-
+const LeaderboardRow = ({
+  item,
+  isActive,
+  screenWidth,
+  travelDistance,
+  onPressIn,
+  onDragOpen,
+  onPress,
+  onSwipeCancel,
+}: LeaderboardRowProps) => {
   return (
-    <Animated.View style={[styles.rowHost, rowStyle]}>
-      <Pressable style={styles.row} onPress={() => onPress(item)}>
-        <Image source={{ uri: item.image }} style={styles.avatar} />
-        <View style={styles.info}>
-          <Text style={styles.name}>{item.name}</Text>
-          <Text style={styles.score}>{item.score}</Text>
-        </View>
-      </Pressable>
-    </Animated.View>
+    <ListRowAnimation
+      isActive={isActive}
+      progress={profileOpenProgress}
+      screenWidth={screenWidth}
+      travelDistance={travelDistance}
+      openVelocityThreshold={LEADERBOARD_OPEN_VELOCITY_THRESHOLD}
+      springConfig={LEADERBOARD_OPEN_SPRING}
+      onPressIn={() => onPressIn(item)}
+      onDragOpen={() => onDragOpen(item)}
+      onPress={() => onPress(item)}
+      onSwipeCancel={onSwipeCancel}
+      rowStyle={styles.row}>
+      <Image source={{ uri: item.image }} style={styles.avatar} />
+      
+      <View style={styles.info}>
+        <Text style={styles.name}>{item.name}</Text>
+        <Text style={styles.score}>{item.score}</Text>
+      </View>
+    </ListRowAnimation>
   );
 };
 
@@ -72,6 +83,7 @@ export const LeaderboardPanel = ({
   const { bottom: safeAreaBottom } = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const [activeEntryId, setActiveEntryId] = useState<string | null>(null);
+  const activeOverlayIdRef = useRef<string | null>(null);
   const listTopInset = useMemo(() => getLeaderboardListTopInset(safeAreaTop), [safeAreaTop]);
 
   const listContentStyle = useMemo(
@@ -84,9 +96,10 @@ export const LeaderboardPanel = ({
     [listTopInset, safeAreaBottom],
   );
 
-  const handleItemPress = useCallback((item: LeaderboardEntry) => {
-    setActiveEntryId(item.id);
-    profileOpenProgress.value = 0;
+  const openSelectedOverlay = useCallback((item: LeaderboardEntry) => {
+    if (activeOverlayIdRef.current) {
+      return;
+    }
 
     Navigation.showOverlay({
       component: {
@@ -98,7 +111,64 @@ export const LeaderboardPanel = ({
         },
         options: slideOverlayOptions,
       },
-    });
+    })
+      .then(componentId => {
+        activeOverlayIdRef.current = componentId;
+      })
+      .catch(() => {
+        activeOverlayIdRef.current = null;
+      });
+  }, []);
+
+  useEffect(() => {
+    const disappearSubscription = Navigation.events().registerComponentDidDisappearListener(
+      ({ componentName, componentId }) => {
+        if (componentName !== ScreenNames.SelectedLeaderBoard) {
+          return;
+        }
+
+        if (!activeOverlayIdRef.current || activeOverlayIdRef.current === componentId) {
+          activeOverlayIdRef.current = null;
+          setActiveEntryId(null);
+          profileOpenProgress.value = 0;
+        }
+      },
+    );
+
+    return () => {
+      disappearSubscription.remove();
+    };
+  }, []);
+
+  const handleItemPress = useCallback(
+    (item: LeaderboardEntry) => {
+      setActiveEntryId(item.id);
+      openSelectedOverlay(item);
+    },
+    [openSelectedOverlay],
+  );
+
+  const handleItemPressIn = useCallback((item: LeaderboardEntry) => {
+    setActiveEntryId(item.id);
+    profileOpenProgress.value = 0;
+  }, []);
+
+  const handleDragOpen = useCallback(
+    (item: LeaderboardEntry) => {
+      setActiveEntryId(item.id);
+      openSelectedOverlay(item);
+    },
+    [openSelectedOverlay],
+  );
+
+  const handleSwipeCancel = useCallback(() => {
+    const overlayId = activeOverlayIdRef.current;
+    if (overlayId) {
+      activeOverlayIdRef.current = null;
+      Navigation.dismissOverlay(overlayId).catch(() => undefined);
+    }
+
+    setActiveEntryId(null);
   }, []);
 
   const renderItem: ListRenderItem<LeaderboardEntry> = useCallback(
@@ -106,11 +176,22 @@ export const LeaderboardPanel = ({
       <LeaderboardRow
         item={item}
         isActive={activeEntryId === item.id}
+        screenWidth={screenWidth}
         travelDistance={screenWidth + 64}
+        onPressIn={handleItemPressIn}
+        onDragOpen={handleDragOpen}
         onPress={handleItemPress}
+        onSwipeCancel={handleSwipeCancel}
       />
     ),
-    [activeEntryId, handleItemPress, screenWidth],
+    [
+      activeEntryId,
+      handleDragOpen,
+      handleItemPress,
+      handleItemPressIn,
+      handleSwipeCancel,
+      screenWidth,
+    ],
   );
 
   const keyExtractor = useCallback((item: LeaderboardEntry) => item.id, []);
@@ -146,9 +227,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
-  },
-  rowHost: {
-    overflow: 'visible',
   },
   avatar: {
     width: 60,
