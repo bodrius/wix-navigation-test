@@ -14,8 +14,7 @@ import { Navigation } from 'react-native-navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  LEADERBOARD_OPEN_SPRING,
-  LEADERBOARD_OPEN_VELOCITY_THRESHOLD,
+  LEADERBOARD_ROW_ANIMATION_CONFIG,
 } from '../constants/leaderboard';
 import { getLeaderboardListTopInset } from '../constants/leaderboardHeader';
 import { LEADERBOARD_DATA, type LeaderboardEntry } from '../data/leaderboard';
@@ -59,15 +58,13 @@ const LeaderboardRow = ({
       progress={profileOpenProgress}
       screenWidth={screenWidth}
       travelDistance={travelDistance}
-      openVelocityThreshold={LEADERBOARD_OPEN_VELOCITY_THRESHOLD}
-      springConfig={LEADERBOARD_OPEN_SPRING}
+      config={LEADERBOARD_ROW_ANIMATION_CONFIG}
       onPressIn={() => onPressIn(item)}
       onDragOpen={() => onDragOpen(item)}
       onPress={() => onPress(item)}
       onSwipeCancel={onSwipeCancel}
       rowStyle={styles.row}>
       <Image source={{ uri: item.image }} style={styles.avatar} />
-      
       <View style={styles.info}>
         <Text style={styles.name}>{item.name}</Text>
         <Text style={styles.score}>{item.score}</Text>

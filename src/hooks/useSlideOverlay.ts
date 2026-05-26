@@ -25,11 +25,13 @@ type UseSlideOverlayOptions = {
   componentId: string;
   /** Global mutable to keep in sync with internal openProgress (UI-thread). */
   externalProgress?: SharedValue<number>;
+  backdropMaxOpacity?: number;
 };
 
 export const useSlideOverlay = ({
   componentId,
   externalProgress,
+  backdropMaxOpacity = LEADERBOARD_BACKDROP_MAX_OPACITY,
 }: UseSlideOverlayOptions) => {
   const { width: screenWidth } = useWindowDimensions();
 
@@ -95,7 +97,7 @@ export const useSlideOverlay = ({
     });
 
   const backdropStyle = useAnimatedStyle(() => ({
-    opacity: openProgress.value * LEADERBOARD_BACKDROP_MAX_OPACITY,
+    opacity: openProgress.value * backdropMaxOpacity,
   }));
 
   const panelStyle = useAnimatedStyle(() => {

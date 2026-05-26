@@ -9,6 +9,7 @@ type SlideOverlayShellProps = {
   componentId: string;
   children: React.ReactNode;
   header?: React.ReactNode;
+  backdropMaxOpacity?: number;
   /** Global mutable to keep in sync with open progress (for cross-overlay crossfade). */
   externalProgress?: SharedValue<number>;
 };
@@ -17,6 +18,7 @@ export const SlideOverlayShell: React.FC<SlideOverlayShellProps> = ({
   componentId,
   children,
   header,
+  backdropMaxOpacity,
   externalProgress,
 }) => {
   const { width: screenWidth } = useWindowDimensions();
@@ -28,7 +30,7 @@ export const SlideOverlayShell: React.FC<SlideOverlayShellProps> = ({
     panelStyle,
     animateClose,
     overlayReady,
-  } = useSlideOverlay({ componentId, externalProgress });
+  } = useSlideOverlay({ componentId, externalProgress, backdropMaxOpacity });
 
   const headerStyle = useAnimatedStyle(() => ({
     opacity: interpolate(openProgress.value, [0.5, 1], [0, 1], Extrapolation.CLAMP),

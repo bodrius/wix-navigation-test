@@ -44,6 +44,7 @@ const SelectedLeaderBoardContent: React.FC<SelectedLeaderBoardProps> = ({
     <SlideOverlayShell
       componentId={componentId}
       header={headerElement}
+      backdropMaxOpacity={0.35}
       externalProgress={profileOpenProgress}
     >
       <View style={styles.content}>

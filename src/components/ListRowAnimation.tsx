@@ -9,8 +9,8 @@ import Animated, {
   useSharedValue,
   withSpring,
   type SharedValue,
-  type WithSpringConfig,
 } from 'react-native-reanimated';
+import type { ListRowAnimationConfig } from '../types/listRowAnimation';
 
 type ListRowAnimationProps = {
   children: React.ReactNode;
@@ -18,16 +18,11 @@ type ListRowAnimationProps = {
   progress: SharedValue<number>;
   screenWidth: number;
   travelDistance: number;
-  openVelocityThreshold: number;
-  springConfig: WithSpringConfig;
+  config: ListRowAnimationConfig;
   onPressIn: () => void;
   onPress: () => void;
   onDragOpen: () => void;
   onSwipeCancel: () => void;
-  activeOffsetX?: number;
-  openThreshold?: number;
-  dragOpenTriggerOffset?: number;
-  failOffsetY?: [number, number];
   rowStyle?: StyleProp<ViewStyle>;
   rowHostStyle?: StyleProp<ViewStyle>;
 };
@@ -38,36 +33,35 @@ export const ListRowAnimation = ({
   progress,
   screenWidth,
   travelDistance,
-  openVelocityThreshold,
-  springConfig,
+  config,
   onPressIn,
   onPress,
   onDragOpen,
   onSwipeCancel,
-  activeOffsetX = 8,
-  openThreshold = 0.25,
-  dragOpenTriggerOffset = 6,
-  failOffsetY = [-14, 14],
   rowStyle,
   rowHostStyle,
 }: ListRowAnimationProps) => {
   const didTriggerOpen = useSharedValue(false);
   const didTriggerDragOpen = useSharedValue(false);
+  const openDistance = config.openDistancePx ?? config.openThreshold * screenWidth;
 
   const animatedRowStyle = useAnimatedStyle(() => {
     const translateX = isActive
       ? interpolate(progress.value, [0, 1], [0, travelDistance], Extrapolation.CLAMP)
       : 0;
+    const inactiveOpacity = interpolate(progress.value, [0, 1], [1, 0.32], Extrapolation.CLAMP);
 
     return {
       transform: [{ translateX }],
-      zIndex: isActive ? 20 : 1,
+      opacity: isActive ? 1 : inactiveOpacity,
+      zIndex: isActive ? 1000 : 1,
+      elevation: isActive ? 1000 : 0,
     };
   }, [isActive, progress, travelDistance]);
 
   const swipeToOpenGesture = Gesture.Pan()
-    .activeOffsetX(activeOffsetX)
-    .failOffsetY(failOffsetY)
+    .activeOffsetX(config.activeOffsetX ?? 8)
+    .failOffsetY(config.failOffsetY ?? [-14, 14])
     .onBegin(() => {
       didTriggerOpen.value = false;
       didTriggerDragOpen.value = false;
@@ -78,7 +72,8 @@ export const ListRowAnimation = ({
         return;
       }
 
-      if (!didTriggerDragOpen.value && event.translationX > dragOpenTriggerOffset) {
+      const dragOpenOffset = config.dragOpenTriggerOffset ?? openDistance;
+      if (!didTriggerDragOpen.value && event.translationX >= dragOpenOffset) {
         didTriggerDragOpen.value = true;
         runOnJS(onDragOpen)();
       }
@@ -92,16 +87,17 @@ export const ListRowAnimation = ({
       }
 
       const shouldOpen =
-        progress.value >= openThreshold || event.velocityX >= openVelocityThreshold;
+        event.translationX >= openDistance ||
+        event.velocityX >= config.openVelocityThreshold;
 
       if (shouldOpen) {
         didTriggerOpen.value = true;
-        progress.value = withSpring(1, springConfig);
+        progress.value = withSpring(1, config.springConfig);
         runOnJS(onPress)();
         return;
       }
 
-      progress.value = withSpring(0, springConfig, finished => {
+      progress.value = withSpring(0, config.springConfig, finished => {
         if (finished) {
           runOnJS(onSwipeCancel)();
         }
