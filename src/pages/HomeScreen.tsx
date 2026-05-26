@@ -284,9 +284,7 @@ const HomeScreenContent: React.FC<NavigationProps> = ({ componentId }) => {
     <GestureHandlerRootView style={styles.container}>
       <GestureDetector gesture={leaderboardOpenGesture}>
         <View style={styles.container}>
-          {isHomeLeaderboardLayerActive ? (
-            <AnimatedTitleCrossfade safeAreaTop={safeAreaTop} showOnHomeLayer />
-          ) : null}
+          <AnimatedTitleCrossfade safeAreaTop={safeAreaTop} showOnHomeLayer />
 
           <View ref={listRef} style={styles.listWrapper}>
             <FlatList

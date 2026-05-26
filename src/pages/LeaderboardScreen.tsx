@@ -57,6 +57,7 @@ const LeaderboardScreenContent: React.FC<NavigationProps> = ({ componentId }) =>
   }, [activateOverlay, componentId]);
 
   const closeScreen = useCallback(() => {
+    isLeaderboardOverlayOpen.value = 0;
     Navigation.dismissOverlay(componentId);
   }, [componentId]);
 
