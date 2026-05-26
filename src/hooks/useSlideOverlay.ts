@@ -16,11 +16,11 @@ import {
 import {
   LEADERBOARD_BACKDROP_MAX_OPACITY,
   LEADERBOARD_DRAG_DISTANCE_RATIO,
-  LEADERBOARD_OPEN_SNAP_THRESHOLD,
   LEADERBOARD_OPEN_SPRING,
 } from '../constants/leaderboard';
 
 const CLOSE_VELOCITY_THRESHOLD = 700;
+const CLOSE_DISTANCE_RATIO = 0.25;
 
 type UseSlideOverlayOptions = {
   componentId: string;
@@ -88,8 +88,10 @@ export const useSlideOverlay = ({
       openProgress.value = Math.max(0, gestureStart.value - dragProgress);
     })
     .onEnd(event => {
+      const closeDistance = Math.abs(event.translationX);
+      const shouldCloseByDistance = closeDistance >= screenWidth * CLOSE_DISTANCE_RATIO;
       const shouldClose =
-        openProgress.value < LEADERBOARD_OPEN_SNAP_THRESHOLD ||
+        shouldCloseByDistance ||
         event.velocityX < -CLOSE_VELOCITY_THRESHOLD;
 
       if (shouldClose) {
